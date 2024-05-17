@@ -1,0 +1,75 @@
+---
+- name: Install and update web servers and manage firewall settings
+  hosts: all
+  become: yes
+
+  vars:
+    http_port: "80"
+    ssh_port: "22"
+
+  tasks:
+
+  - name: Update and install nginx on Ubuntu
+    apt:
+      name: nginx
+      state: latest
+      update_cache: yes
+    when: ansible_distribution == 'Ubuntu'
+
+  - name: Update and install httpd on CentOS
+    yum:
+      name: httpd
+      state: latest
+      update_cache: yes
+    when: ansible_distribution == 'CentOS'
+
+  - name: Ensure httpd is running and enabled on CentOS
+    service:
+      name: httpd
+      state: started
+      enabled: yes
+    when: ansible_distribution == 'CentOS'
+
+  - name: Install or upgrade net-tools on CentOS
+    yum:
+      name: net-tools
+      state: latest
+    when: ansible_distribution == 'CentOS'
+
+  - name: Set up UFW firewall for Ubuntu
+    block:
+      - name: Allow SSH and HTTP ports
+        community.general.ufw:
+          rule: allow
+          port: "{{ item }}"
+          proto: tcp
+        loop:
+          - "{{ ssh_port }}"
+          - "{{ http_port }}"
+
+      - name: Enable UFW, set default to deny
+        community.general.ufw:
+          state: enabled
+          policy: deny
+          logging: on
+
+    when: ansible_distribution == 'Ubuntu'
+
+  - name: Configure firewalld for CentOS
+    block:
+      - name: Add HTTP and SSH ports to firewall
+        firewalld:
+          port: "{{ item }}/tcp"
+          state: enabled
+          immediate: true
+          permanent: true
+        loop:
+          - "{{ ssh_port }}"
+          - "{{ http_port }}"
+
+    when: ansible_distribution == 'CentOS'
+
+  - name: Copy index.html to the web directory on both distributions
+    ansible.builtin.copy:
+      src: ./index.html
+      dest: /var/www/html/
